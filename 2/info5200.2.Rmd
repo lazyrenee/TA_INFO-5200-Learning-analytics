@@ -1,0 +1,209 @@
+---
+title: "Exploring Educational Datasets"
+author: '[[ADD YOUR NAME, CORNELL ID]]'
+subtitle: 'INFO 5200 Learning Analytics: Week 2 Homework'
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+## Introducing the Data Context
+
+For this homework, you will be analyzing two public datasets obtained from [PSLC DataShop](http://pslcdatashop.org). 
+
+- The first dataset provides question-level data of students practicing math problems in academic year 2004-2005 using the [Assisstments platform](https://www.assistments.org/). On this platform, students can attempt a problem many times to get it right and they can ask for more and more hints on a problem until the final hint tells them what the answer is.
+
+- The second dataset derives from an educational game for improving math sense. The online game site is not live anymore but here is a [video of the game](https://www.youtube.com/watch?v=DWfRSnlZvlQ). Watch it to better understand the variables in the dataset. A special feature of this dataset is that it records data for a randomized experiment with two conditions to test a research hypothesis about how to teach kids "that fractions represent magnitudes of the same basic type as whole numbers."
+
+## Loading Datasets
+
+Before you can load data, you need to figure out the format that it is saved in. The file extension typically corresponds to the format, but this is not always the case. R has functions to load all common data files, most of these functions start with `read`, e.g. `read.csv()` for CSVs or `read.tsv()` for tab-separated values. The **foreign** package adds functions to import many additional data file types. For large data files, consider using the `fread` function in the **data.table** package: it's fast and reliable.
+
+The `readRDS()` and `saveRDS()` functions allow you to important and export any object in R. This can be a scala, vector, matrix, data.frame, function, or any other object. Moreover, saving a dataset as an RDS file is much more efficient (smaller file size) than saving it as a CSV.
+
+- Load the Assistments dataset (*info5200.2.assisstments.rds*) into R and call it `asm`.
+- Load the fraction game dataset (*info5200.2.gamedata.csv*) into R and call it `fr`.
+
+```{r}
+asm = readRDS("info5200.2.assisstments.rds") 
+fr = read.csv("info5200.2.gamedata.csv")
+```
+
+## Exploring the Assisstments Dataset
+
+It is hard to overstate the importance of understanding the data you are working with. You want to understand the data-generating process, how exactly the data came about. But first, you need to understand what is in the dataset. Look at the first few lines using `head()`.
+
+```{r}
+head(asm)
+```
+
+Based on the first few lines of data, and what we know about the dataset, we can infer the following:
+
+- *studentID* is an identifier for students
+- *itemid* is an identifier for math questions
+- *correctonfirstattempt* is an indicator of whether a student answered correctly on the first attempt
+- *attempts* is the number of answer attempts required
+- *hints* the number of hints a student requested
+- *seconds* time spent on the question in seconds
+- the remaining columns provide start and end times and dates for each question
+
+It also shows us that the dataset is in **long format** (1 row = 1 event) instead of wide format (1 row = 1 individual). However, as you can see from the *attempts* variable, you do not have data on each attempt, but a question-level rollup. The data is at the student-question level, which means that there is one row for each question a student attempted that summarizes interaction with the question (performance indicators and time spent).
+
+Now answer the following questions with this dataset.
+
+Q1: How many unique individuals are in there?
+```{r}
+length(unique(asm$studentID))
+```
+
+Q2: How many unique questions are there?
+```{r}
+length(unique(asm$itemid))
+```
+
+Q3: What is the rate of getting it right on the first attempt?
+```{r}
+mean(asm$correctonfirstattempt)
+```
+
+Q4: What is the rate of asking for hints?
+```{r}
+mean(asm$hints>0)
+```
+
+Q5: How long do students spend on a question on average?
+```{r}
+mean(asm$seconds)
+```
+
+Q6: Plot the distribution of attempts as a histogram:
+```{r}
+hist(asm$attempts)
+```
+
+Q7: Plot the distribution of hints as a histogram:
+```{r}
+hist(asm$hints)
+```
+
+Q8: What are the three pair-wise correlations between seconds, attempts, and hints?
+```{r}
+cor(asm$seconds, asm$attempts)
+cor(asm$attempts, asm$hints)
+cor(asm$seconds, asm$hints)
+```
+
+Q9: Plot the distributions of time spent comparing questions that students got right on the first attempts and those where it took more attempts using a boxplot:
+```{r}
+boxplot(asm$seconds ~ asm$correctonfirstattempt)
+```
+
+Q10: Tabulate the frequency distribution of hints using `table()`:
+```{r}
+table(asm$hints)
+```
+
+Q11: Tabulate the frequency distribution of hints against getting it right on the first attempt (note in the output that 6+2+2 handful of students asked for hints before making an attempt and then got it right on their first attempt):
+```{r}
+table(asm$hints, asm$correctonfirstattempt)
+```
+
+Q12: Plot the distribution of how many questions students attempted:
+```{r}
+table(asm$studentID)
+hist(table(asm$studentID))
+```
+
+Q13: Plot the student-level distribution (i.e. 1 value per student) of answering correctly on the first attempt (hint: you first need to compute the proportion of questions that each student got right on first attempt; there are several ways to do this, e.g. using `sapply()`, or loading the `tidyverse` package and using `group_by` and `summarise`, or using syntax from the `data.table` package which is the fastest option; do NOT use a *for* loop unless you really cannot solve it otherwise):
+```{r}
+q13.sapply = sapply(
+  X = unique(asm$studentID),
+  FUN = function (id) mean(asm$correctonfirstattempt[asm$studentID == id]) 
+)
+hist(q13.sapply)
+
+# library(tidyverse, quietly = T) q13.tv = asm %>%
+# group_by(studentID) %>%
+# summarise(p_correct = mean(correctonfirstattempt)) hist(q13.tv$p_correct)
+# 
+# library(data.table, quietly = T)
+# q13.dt = data.table(asm)[,.(p_correct = mean(correctonfirstattempt)), by = studentID] hist(q13.dt$p_correct)
+
+```
+
+Q14: Plot the student-level relationship between getting questions correct (as in Q13; x-axis) and the average number of hints (y-axis) using a scatter plot. Try adding a straight line to fit the data.
+```{r}
+q14 = asm %>% 
+  group_by(studentID) %>% 
+  summarise(
+    p_correct = mean(correctonfirstattempt),
+    m_hints = mean(hints) )
+plot(q14$p_correct, q14$m_hints) 
+abline(lm(q14$m_hints ~ q14$p_correct))
+```
+
+Q15: Are students who attempt more questions (i.e. get more practice) more likely to answer correctly on the first attempt? Provide a correlation and scatterplot.
+```{r}
+q15 = asm %>% 
+  group_by(studentID) %>% 
+  summarise(
+    p_correct = mean(correctonfirstattempt),
+    num_items = n()
+  )
+cor(q15$num_items, q15$p_correct)
+
+plot(q15$num_items, q15$p_correct)
+```
+
+Q16: How difficult are the questions? Plot the question-level distribution of the proportion of students who get it right on the first attempt as a histogram. This quantitiy is called "item difficulty" (Tip: use the same approach as in Q13)
+```{r}
+q16 = asm %>%
+  group_by(itemid) %>%
+  summarise(p_correct = mean(correctonfirstattempt))
+hist(q16$p_correct)
+```
+
+Q17: Repeat Q16 but exclude questions that were attempted fewer than 10 times (note in the plot that this reduces the spikes at 0 and 1).
+```{r}
+q17 = asm %>% 
+  group_by(itemid) %>% 
+  summarise(
+    p_correct = mean(correctonfirstattempt),
+    n = n() 
+  ) %>%
+  filter(n >= 10)
+
+hist(q17$p_correct)
+```
+
+## Exploring the Fractions Game Dataset
+
+Print the first few lines of the fractions dataset:
+```{r}
+head(fr)
+```
+
+There are more columns in this dataset and it requires watching the game video closely to understand what the variables could mean. On your own, go though each column as I did above and reason about what the variable could mean. It is not obvious that the column identifying users is *firstName*. Below are just a few questions.
+
+Q18: Remove rows from the dataset where the *firstName* column is empty. How many unique students are there?
+```{r}
+fr = fr %>% filter(firstName != "")
+n_distinct(fr$firstName) # like length(unique()), requires tidyverse
+```
+
+Q19: How does the game judge between a Miss, Near Miss, Partial Hit, and Perfect Hit? Make a boxplot of current accuracy against the hit type to investigate. 
+```{r}
+boxplot(fr$currentAccuracy ~ fr$hitType)
+```
+
+Q20: Find the variable that best predicts the current accuracy out of the following: *Trials.per.user, currentLevelNo, curReactionTime, itemsPlayed, currentStarCount*?
+```{r}
+options(digits = 2) # round to two sig. digits fr %>%
+select(currentAccuracy, Trials.per.user, currentLevelNo, curReactionTime, itemsPlayed, currentStarCount) %>%
+cor # cor() computes the pair-wise Pearson correlations
+```
+
+# Submit Homework
+
+This is the end of the homework. Please **Knit a PDF report** that shows both the R code and R output and upload it on the EdX platform.
